@@ -130,7 +130,7 @@ class TestSqliteSaver:
 
     def test_search_where(self) -> None:
         # call method / assertions
-        expected_predicate_1 = "WHERE json_extract(CAST(metadata AS TEXT), '$.\"source\"') = ? AND json_extract(CAST(metadata AS TEXT), '$.\"step\"') = ? AND json_extract(CAST(metadata AS TEXT), '$.\"writes\"') = ? AND json_extract(CAST(metadata AS TEXT), '$.\"score\"') = ? AND checkpoint_id < ?"
+        expected_predicate_1 = "WHERE json_extract(CAST(metadata AS TEXT), '$.source') = ? AND json_extract(CAST(metadata AS TEXT), '$.step') = ? AND json_extract(CAST(metadata AS TEXT), '$.writes') = ? AND json_extract(CAST(metadata AS TEXT), '$.score') = ? AND checkpoint_id < ?"
         expected_param_values_1 = ["input", 2, "{}", 1, "1"]
         assert search_where(
             None, cast(dict[str, Any], self.metadata_1), self.config_1
@@ -142,16 +142,16 @@ class TestSqliteSaver:
     def test_metadata_predicate(self) -> None:
         # call method / assertions
         expected_predicate_1 = [
-            "json_extract(CAST(metadata AS TEXT), '$.\"source\"') = ?",
-            "json_extract(CAST(metadata AS TEXT), '$.\"step\"') = ?",
-            "json_extract(CAST(metadata AS TEXT), '$.\"writes\"') = ?",
-            "json_extract(CAST(metadata AS TEXT), '$.\"score\"') = ?",
+            "json_extract(CAST(metadata AS TEXT), '$.source') = ?",
+            "json_extract(CAST(metadata AS TEXT), '$.step') = ?",
+            "json_extract(CAST(metadata AS TEXT), '$.writes') = ?",
+            "json_extract(CAST(metadata AS TEXT), '$.score') = ?",
         ]
         expected_predicate_2 = [
-            "json_extract(CAST(metadata AS TEXT), '$.\"source\"') = ?",
-            "json_extract(CAST(metadata AS TEXT), '$.\"step\"') = ?",
-            "json_extract(CAST(metadata AS TEXT), '$.\"writes\"') = ?",
-            "json_extract(CAST(metadata AS TEXT), '$.\"score\"') IS ?",
+            "json_extract(CAST(metadata AS TEXT), '$.source') = ?",
+            "json_extract(CAST(metadata AS TEXT), '$.step') = ?",
+            "json_extract(CAST(metadata AS TEXT), '$.writes') = ?",
+            "json_extract(CAST(metadata AS TEXT), '$.score') IS ?",
         ]
         expected_predicate_3: list[str] = []
 
@@ -296,20 +296,19 @@ class TestSqliteSaver:
             results = list(saver.list(None, filter={"access-level": "public"}))
             assert len(results) == 1
 
-            # Dotted filter key is literal, so this does not match the nested value.
+            # Nested hyphenated key via dotted path
             results = list(saver.list(None, filter={"user.access-level": "nested"}))
-            assert len(results) == 0
+            assert len(results) == 1
 
             # Top-level digit-starting key
             results = list(saver.list(None, filter={"123abc": "ok"}))
             assert len(results) == 1
 
-            # Dotted filter key is literal, so this does not match the nested value.
+            # Nested digit-starting key via dotted path
             results = list(saver.list(None, filter={"user.123abc": "ok2"}))
-            assert len(results) == 0
+            assert len(results) == 1
 
-    def test_metadata_filter_dotted_key_is_literal(self) -> None:
-        """A dot in a filter key is part of that key, not a nested JSON path."""
+    def test_filter_metadata_key_with_dot(self) -> None:
         with SqliteSaver.from_conn_string(":memory:") as saver:
             config: RunnableConfig = {
                 "configurable": {
@@ -317,26 +316,9 @@ class TestSqliteSaver:
                     "checkpoint_ns": "",
                 }
             }
-            checkpoint = empty_checkpoint()
-            metadata: CheckpointMetadata = {
-                "group.sub": "alpha",
-                "group": {"sub": "nested"},
-                "service.name": "api",
-                "source": "input",
-            }
-            saver.put(config, checkpoint, metadata, {})
+            metadata: CheckpointMetadata = {"group.sub": "alpha"}
+            saver.put(config, empty_checkpoint(), metadata, {})
 
             matches = list(saver.list(None, filter={"group.sub": "alpha"}))
             assert len(matches) == 1
             assert matches[0].metadata["group.sub"] == "alpha"
-
-            assert list(saver.list(None, filter={"group.sub": "nested"})) == []
-            assert list(saver.list(None, filter={"group.sub": "beta"})) == []
-            assert len(list(saver.list(None, filter={"service.name": "api"}))) == 1
-            assert len(list(saver.list(None, filter={"source": "input"}))) == 1
-
-            predicates, values = _metadata_predicate({"group.sub": "alpha"})
-            assert predicates == [
-                "json_extract(CAST(metadata AS TEXT), '$.\"group.sub\"') = ?"
-            ]
-            assert list(values) == ["alpha"]

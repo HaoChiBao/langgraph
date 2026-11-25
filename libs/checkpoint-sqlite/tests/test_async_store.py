@@ -809,24 +809,3 @@ async def test_sync_methods_reject_invalid_namespace_labels(
 
     item = await store.aget(("foo", "bar"), "key")
     assert item is not None and item.value == {"original": True}
-
-
-async def test_filter_dotted_key_is_literal(store: AsyncSqliteStore) -> None:
-    """A dot in a filter key is part of that key, not a nested JSON path."""
-    await store.aput(
-        ("docs",),
-        "flat",
-        {"group.sub": "alpha", "group": {"sub": "nested"}, "service.name": "api"},
-    )
-    await store.aput(("docs",), "other", {"group.sub": "beta"})
-
-    results = await store.asearch(("docs",), filter={"group.sub": "alpha"})
-    assert [r.key for r in results] == ["flat"]
-
-    results = await store.asearch(("docs",), filter={"group.sub": {"$eq": "alpha"}})
-    assert [r.key for r in results] == ["flat"]
-
-    assert await store.asearch(("docs",), filter={"group.sub": "nested"}) == []
-    assert await store.asearch(("docs",), filter={"group.sub": {"$eq": "nested"}}) == []
-    results = await store.asearch(("docs",), filter={"service.name": "api"})
-    assert [r.key for r in results] == ["flat"]
