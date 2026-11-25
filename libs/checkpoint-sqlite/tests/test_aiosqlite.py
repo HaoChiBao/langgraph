@@ -188,3 +188,43 @@ class TestAsyncSqliteSaver:
             # (would have been dropped if injection succeeded)
             results = [c async for c in saver.alist(None, limit=None)]
             assert len(results) == 5
+
+    async def test_metadata_filter_dotted_key_is_literal(self) -> None:
+        """A dot in a filter key is part of that key, not a nested JSON path."""
+        async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+            config: RunnableConfig = {
+                "configurable": {
+                    "thread_id": "thread-dotted",
+                    "checkpoint_ns": "",
+                }
+            }
+            metadata: CheckpointMetadata = {
+                "group.sub": "alpha",
+                "group": {"sub": "nested"},
+                "service.name": "api",
+                "source": "input",
+            }
+            await saver.aput(config, empty_checkpoint(), metadata, {})
+
+            matches = [
+                c async for c in saver.alist(None, filter={"group.sub": "alpha"})
+            ]
+            assert len(matches) == 1
+            assert matches[0].metadata["group.sub"] == "alpha"
+
+            assert [
+                c async for c in saver.alist(None, filter={"group.sub": "nested"})
+            ] == []
+            assert [
+                c async for c in saver.alist(None, filter={"group.sub": "beta"})
+            ] == []
+            assert (
+                len(
+                    [c async for c in saver.alist(None, filter={"service.name": "api"})]
+                )
+                == 1
+            )
+            assert (
+                len([c async for c in saver.alist(None, filter={"source": "input"})])
+                == 1
+            )

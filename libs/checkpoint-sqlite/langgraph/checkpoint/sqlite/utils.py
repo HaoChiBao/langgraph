@@ -67,7 +67,7 @@ def _metadata_predicate(
         _validate_filter_key(query_key)
         operator, param_value = _where_value(query_value)
         predicates.append(
-            f"json_extract(CAST(metadata AS TEXT), '$.{query_key}') {operator}"
+            f"json_extract(CAST(metadata AS TEXT), '$.\"{query_key}\"') {operator}"
         )
         param_values.append(param_value)
 

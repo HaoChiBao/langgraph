@@ -1192,17 +1192,38 @@ def test_filter_keys_with_hyphens_and_digits(store: SqliteStore) -> None:
     results = store.search(("docs",), filter={"access-level": "public"})
     assert [r.key for r in results] == ["hyphen"]
 
-    # Nested hyphenated key via dotted path
+    # Dotted filter key is literal, so this does not match the nested value.
     results = store.search(("docs",), filter={"user.access-level": "nested"})
-    assert [r.key for r in results] == ["hyphen"]
+    assert [r.key for r in results] == []
 
     # Top-level digit-starting key
     results = store.search(("docs",), filter={"123abc": "ok"})
     assert [r.key for r in results] == ["digit"]
 
-    # Nested digit-starting key via dotted path
+    # Dotted filter key is literal, so this does not match the nested value.
     results = store.search(("docs",), filter={"user.123abc": "ok2"})
-    assert [r.key for r in results] == ["digit"]
+    assert [r.key for r in results] == []
+
+
+def test_filter_dotted_key_is_literal(store: SqliteStore) -> None:
+    """A dot in a filter key is part of that key, not a nested JSON path."""
+    store.put(
+        ("docs",),
+        "flat",
+        {"group.sub": "alpha", "group": {"sub": "nested"}, "service.name": "api"},
+    )
+    store.put(("docs",), "other", {"group.sub": "beta"})
+
+    results = store.search(("docs",), filter={"group.sub": "alpha"})
+    assert [r.key for r in results] == ["flat"]
+
+    results = store.search(("docs",), filter={"group.sub": {"$eq": "alpha"}})
+    assert [r.key for r in results] == ["flat"]
+
+    assert store.search(("docs",), filter={"group.sub": "nested"}) == []
+    assert store.search(("docs",), filter={"group.sub": {"$eq": "nested"}}) == []
+    results = store.search(("docs",), filter={"service.name": "api"})
+    assert [r.key for r in results] == ["flat"]
 
 
 @pytest.mark.parametrize("distance_type", VECTOR_TYPES)
