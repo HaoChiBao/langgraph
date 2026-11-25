@@ -307,3 +307,18 @@ class TestSqliteSaver:
             # Nested digit-starting key via dotted path
             results = list(saver.list(None, filter={"user.123abc": "ok2"}))
             assert len(results) == 1
+
+    def test_filter_metadata_key_with_dot(self) -> None:
+        with SqliteSaver.from_conn_string(":memory:") as saver:
+            config: RunnableConfig = {
+                "configurable": {
+                    "thread_id": "thread-dotted",
+                    "checkpoint_ns": "",
+                }
+            }
+            metadata: CheckpointMetadata = {"group.sub": "alpha"}
+            saver.put(config, empty_checkpoint(), metadata, {})
+
+            matches = list(saver.list(None, filter={"group.sub": "alpha"}))
+            assert len(matches) == 1
+            assert matches[0].metadata["group.sub"] == "alpha"
